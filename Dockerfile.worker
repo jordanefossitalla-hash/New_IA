@@ -1,0 +1,24 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml README.md /app/
+
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -e .[dev]
+
+COPY src /app/src
+COPY alembic.ini /app/alembic.ini
+COPY alembic /app/alembic
+COPY scripts /app/scripts
+COPY logging.yaml /app/logging.yaml
+
+RUN chmod +x /app/scripts/entrypoint-worker.sh
