@@ -9,6 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 from pgvector.sqlalchemy import Vector
 
 # revision identifiers, used by Alembic.
@@ -20,15 +21,26 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'document_status') THEN
+                CREATE TYPE document_status AS ENUM ('pending', 'processing', 'completed', 'failed');
+            END IF;
+        END
+        $$;
+        """
+    )
 
-    document_status = sa.Enum(
+    document_status = postgresql.ENUM(
         "pending",
         "processing",
         "completed",
         "failed",
         name="document_status",
+        create_type=False,
     )
-    document_status.create(op.get_bind(), checkfirst=True)
 
     op.create_table(
         "documents",
@@ -89,4 +101,4 @@ def downgrade() -> None:
     op.drop_index("ix_documents_journal_name", table_name="documents")
     op.drop_table("documents")
 
-    sa.Enum(name="document_status").drop(op.get_bind(), checkfirst=True)
+    op.execute("DROP TYPE IF EXISTS document_status")
