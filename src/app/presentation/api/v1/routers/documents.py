@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import logging
 from datetime import date
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.application.services.document_upload_service import DocumentUploadService
@@ -11,6 +13,7 @@ from app.infrastructure.repositories.sqlalchemy_document_repository import SQLAl
 from app.worker.tasks.document_processing import process_document_task
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+logger = logging.getLogger(__name__)
 
 
 def get_db_session() -> Session:
@@ -41,7 +44,17 @@ async def upload_document_pdf(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except SQLAlchemyError as exc:
+        logger.exception("Database error while uploading document")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erreur base de donnees lors de l'upload.",
+        ) from exc
 
-    process_document_task.delay(document_id)
+    try:
+        process_document_task.delay(document_id)
+    except Exception:
+        # Upload is already persisted; keep API successful even if queue is temporarily unavailable.
+        logger.exception("Failed to enqueue document processing task", extra={"document_id": document_id})
 
     return {"document_id": document_id}
