@@ -13,4 +13,3 @@ venv/
 .git/
 .gitignore
 .env
-README.md
